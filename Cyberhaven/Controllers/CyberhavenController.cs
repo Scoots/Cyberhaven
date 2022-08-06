@@ -30,7 +30,7 @@ namespace Cyberhaven.Controllers
         [Route("/stats")]
         public ActionResult<Dictionary<string, long>> GetStats()
         {
-            return ClientJoinManager.Instance.StatsMap;
+            return ClientJoinManager.Instance.StatsMap.Stats;
         }
     }
 }

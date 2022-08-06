@@ -9,9 +9,7 @@ namespace Cyberhaven
         public static ClientJoinManager Instance { get { return lazy.Value; } }
 
         // The map of our statistics, along with the highest key we have and its associated value
-        public readonly Dictionary<string, long> StatsMap = new();
-        private string _highGuid = string.Empty;
-        private long _highGuidValue = long.MinValue;
+        public StatsMap StatsMap { get; } = new StatsMap(50000);
 
         // Private queue that all enqueue requests will go into
         // Made it private so we could lock on it safely
@@ -175,28 +173,7 @@ namespace Cyberhaven
 
                 // Find our millisecond difference (not micro in C#, sorry)
                 var millisecondsToJoin = millisecondEnd - millisecondStart;
-
-                // Always add to our map - this is accounted for with > in our count check below
-                StatsMap[guid] = millisecondsToJoin;
-
-                // Update our high value, this is O(1) but is unnecessary if we are over 50000
-                // I'm not looking for these optimizations right now
-                if (millisecondsToJoin > _highGuidValue)
-                {
-                    _highGuid = guid;
-                    _highGuidValue = millisecondsToJoin;
-                }
-
-                // If we are over our desired count, remove the highest and find the new highest
-                if (StatsMap.Count > 50000)
-                {
-                    // After we remove the highest value, we need to find the new highest
-                    // We can do that by doing an O(N) operation over the dictionary, and pulling
-                    // the new high value is O(1) because this is a hash map
-                    StatsMap.Remove(_highGuid); // O(1)
-                    _highGuid = StatsMap.MaxBy(kvp => kvp.Value).Key; // O(N)
-                    _highGuidValue = StatsMap[_highGuid]; // O(1)
-                }
+                StatsMap.Add(guid, millisecondsToJoin);
             }
         }
     }
