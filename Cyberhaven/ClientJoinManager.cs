@@ -4,12 +4,8 @@ namespace Cyberhaven
 {
     internal class ClientJoinManager
     {
-        // Lazy singleton setup, so everything will interact with this instance
         private static readonly Lazy<ClientJoinManager> lazy = new(() => new ClientJoinManager());
         public static ClientJoinManager Instance { get { return lazy.Value; } }
-
-        // The map of our statistics, along with the highest key we have and its associated value
-        public StatsMap StatsMap { get; } = new StatsMap(50000);
 
         // Private queue that all enqueue requests will go into
         // Made it private so we could lock on it safely
@@ -51,28 +47,6 @@ namespace Cyberhaven
                                 }
                             }
 
-                            var timer = new Timer(callback, null, 10000, Timeout.Infinite);
-                            void callback(object? _)
-                            {
-                                // Lock on the userMap to safely interact with it
-                                lock (_userMap)
-                                {
-                                    // Verify the entry is still there - if it isn't, then leave
-                                    if (!_userMap.ContainsKey(message.UserId))
-                                    {
-                                        return;
-                                    }
-
-                                    var mapMessage = _userMap[message.UserId];
-                                    var taskCompletionSource = mapMessage.Message.TaskSource;
-
-                                    // Set the result on the task source taht was passed in from the API
-                                    taskCompletionSource.SetResult(new JoinResponse() { Guid = string.Empty, Position = string.Empty, Error = "Timeout" });
-                                    RemoveFromMap(message.UserId);
-                                    _firstUserId = null;
-                                }
-                            }
-
                             // Lock on the userMap to safely interact with it
                             lock (_userMap)
                             {
@@ -80,7 +54,7 @@ namespace Cyberhaven
                                 var mapMessage = new ClientJoinManagerMapData()
                                 {
                                     Message = message,
-                                    Timer = timer,
+                                    Timer = GetTimer(message.UserId),
                                     ReceivedTimeinMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                                 };
                                 _userMap.Add(message.UserId, mapMessage);
@@ -164,17 +138,41 @@ namespace Cyberhaven
 
         private void AddToStatsMap(string guid, long millisecondStart, long millisecondEnd)
         {
-            lock (StatsMap)
+            // Don't need to lock here, since this is only called from a single-threaded space
+            // However, safer to do it until I can test thoroughly
+            lock (StatsMap.Instance)
             {
-                if (StatsMap.ContainsKey(guid))
-                {
-                    throw new Exception("This GUID has already been added, which should never happen");
-                }
-
                 // Find our millisecond difference (not micro in C#, sorry)
                 var millisecondsToJoin = millisecondEnd - millisecondStart;
-                StatsMap.Add(guid, millisecondsToJoin);
+                StatsMap.Instance.Add(guid, millisecondsToJoin);
             }
+        }
+
+        private Timer GetTimer(int userId)
+        {
+            var timer = new Timer(timerCallback, null, 10000, Timeout.Infinite);
+            void timerCallback(object? _)
+            {
+                // Lock on the userMap to safely interact with it
+                lock (_userMap)
+                {
+                    // Verify the entry is still there - if it isn't, then leave
+                    if (!_userMap.ContainsKey(userId))
+                    {
+                        return;
+                    }
+
+                    var mapMessage = _userMap[userId];
+                    var taskCompletionSource = mapMessage.Message.TaskSource;
+
+                    // Set the result on the task source taht was passed in from the API
+                    taskCompletionSource.SetResult(new JoinResponse() { Guid = string.Empty, Position = string.Empty, Error = "Timeout" });
+                    RemoveFromMap(userId);
+                    _firstUserId = null;
+                }
+            }
+
+            return timer;
         }
     }
 }

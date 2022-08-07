@@ -2,25 +2,22 @@
 {
     internal class StatsMap
     {
+        private static readonly Lazy<StatsMap> lazy = new(() => new StatsMap());
+        public static StatsMap Instance { get { return lazy.Value; } }
+
+        private const int _maximumStatsStored = 50000;
+        private string _highKey = string.Empty;
+        private long _highValue = long.MinValue;
+
+        private readonly Dictionary<string, long> _map = new();
         public Dictionary<string, long> Stats
         { 
             get
             {
-                return _map;
+                // Shallow copy should be fine here, just string and long
+                return _map.ToDictionary(entry => entry.Key, entry => entry.Value);
             } 
         }
-
-        private readonly Dictionary<string, long> _map = new();
-        private readonly int _maximumStatsStored;
-        
-        private string _highKey = string.Empty;
-        private long _highValue = long.MinValue;
-
-        public StatsMap(int maximumStatsStored)
-        {
-            _maximumStatsStored = maximumStatsStored;
-        }
-
 
         public bool ContainsKey(string key)
         {
@@ -29,6 +26,11 @@
 
         public void Add(string key, long value)
         {
+            if (_map.ContainsKey(key))
+            {
+                throw new Exception($"This key has already been added, which should never happen: {key}");
+            }
+
             _map[key] = value;
 
             // Update our high value, this is O(1) but is unnecessary if we are over 50000
@@ -50,6 +52,5 @@
                 _highValue = _map[_highKey]; // O(1)
             }
         }
-
     }
 }
