@@ -1,27 +1,47 @@
-﻿namespace Cyberhaven.Data
-{
-    internal class StatsMap
-    {
-        private static readonly Lazy<StatsMap> lazy = new(() => new StatsMap());
-        public static StatsMap Instance { get { return lazy.Value; } }
+﻿using System.Collections.ObjectModel;
 
-        private const int _maximumStatsStored = 50000;
+namespace Cyberhaven.Data
+{
+    public interface IStatsMap
+    {
+        ReadOnlyDictionary<string, long> Stats { get; }
+        void Add(string key, long value);
+    }
+
+    /// <summary>
+    /// Object that would interact with the database on startup and store data on client join
+    /// statistics. We don't inherit from Dictionary<string, long> because we want to make sure
+    /// the access to the underlying data structure is locked down
+    /// </summary>
+    internal class StatsMap : IStatsMap
+    {
+        /// <summary>
+        /// The maximum pieces of data that will be stored and returned
+        /// </summary>
+        private readonly int _maximumStatsStored;
+
+        /// <summary>
+        /// The key for the item with the highest value, and its associated value
+        /// </summary>
         private string _highKey = string.Empty;
         private long _highValue = long.MinValue;
 
+        /// <summary>
+        /// Private dictionary containing our map, wreturns a ReadOnlyDictionary for safety
+        /// </summary>
         private readonly Dictionary<string, long> _map = new();
-        public Dictionary<string, long> Stats
+        public ReadOnlyDictionary<string, long> Stats
         { 
             get
             {
-                // Shallow copy should be fine here, just string and long
-                return _map.ToDictionary(entry => entry.Key, entry => entry.Value);
+                return new ReadOnlyDictionary<string, long>(_map);
             } 
         }
 
-        public bool ContainsKey(string key)
+        public StatsMap(CyberhavenConfig config)
         {
-            return _map.ContainsKey(key);
+            _maximumStatsStored = config.MaxStatCountStored;
+            // If we had a db backend we would populate our stats from there here, and then keep a local cache for speed
         }
 
         public void Add(string key, long value)
@@ -31,10 +51,17 @@
                 throw new Exception($"This key has already been added, which should never happen: {key}");
             }
 
+            // If we are at our maximum limit, and the current value is higher than our highest in the list
+            // we will just return - we don't need to add anything. If we were backing this with a data store
+            // we would still save it to the database
+            if (_map.Count >= _maximumStatsStored && value > _highValue)
+            {
+                return;
+            }
+
             _map[key] = value;
 
-            // Update our high value, this is O(1) but is unnecessary if we are over 50000
-            // I'm not looking for these optimizations right now
+            // Update our high value, this is O(1)
             if (value > _highValue)
             {
                 _highKey = key;

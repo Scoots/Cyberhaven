@@ -1,3 +1,4 @@
+using Cyberhaven.Data;
 using Microsoft.OpenApi.Models;
 
 namespace Cyberhaven
@@ -11,8 +12,16 @@ namespace Cyberhaven
             builder.Configuration
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile($"appsettings.json", optional: true, reloadOnChange: false)
+                .AddJsonFile($"appsettings.Development.json", optional: true, reloadOnChange: false)
                 .AddEnvironmentVariables()
                 .Build();
+
+            var config = ConfigurationBinder.Get<CyberhavenConfig>(builder.Configuration);
+            builder.Services.AddSingleton(config);
+
+            builder.Services.AddSingleton<IStatsMap, StatsMap>();
+
+            builder.Services.AddSingleton<IJoinManager, JoinManager>();
 
             builder.Services.AddCors(options =>
             {

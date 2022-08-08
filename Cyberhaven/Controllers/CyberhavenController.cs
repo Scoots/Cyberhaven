@@ -12,12 +12,21 @@ namespace Cyberhaven.Controllers
         // authentication/authorization hooks
         private static int fakeUserId = 0;
 
+        private readonly IJoinManager _joinManager;
+        private readonly IStatsMap _statsMap;
+
+        public CyberhavenController(IJoinManager joinManager, IStatsMap statsMap)
+        {
+            _joinManager = joinManager;
+            _statsMap = statsMap;
+        }
+
         [HttpPost]
         [Route("/join")]
         public async Task<ActionResult<JoinResponse>> JoinWithOtherClient()
         {
             TaskCompletionSource<JoinResponse> taskCompletionSource = new();
-            ClientJoinManager.Instance.Enqueue(new ApiQueueMessage
+            _joinManager.Enqueue(new JoinRequestQueueMessage
             {
                 UserId = fakeUserId++,
                 TaskSource = taskCompletionSource
@@ -30,7 +39,8 @@ namespace Cyberhaven.Controllers
         [Route("/stats")]
         public ActionResult<Dictionary<string, long>> GetStats()
         {
-            return StatsMap.Instance.Stats;
+            // Wasteful in the name of safety, converting from Dict to ReadOnlyDict back to Dict
+            return _statsMap.Stats.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         }
     }
 }

@@ -1,8 +1,8 @@
 ﻿namespace Cyberhaven.Data
 {
-    internal class ClientJoinManagerMapData
+    internal class JoinManagerMapData
     {
-        public ApiQueueMessage Message { get; set; } = default!;
+        public JoinRequestQueueMessage Message { get; set; } = default!;
         public Timer Timer { get; set; } = default!;
         public long ReceivedTimeinMilliseconds { get; set; }
     }

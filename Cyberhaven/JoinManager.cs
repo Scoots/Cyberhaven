@@ -2,24 +2,31 @@
 
 namespace Cyberhaven
 {
-    internal class ClientJoinManager
+    public interface IJoinManager
     {
-        private static readonly Lazy<ClientJoinManager> lazy = new(() => new ClientJoinManager());
-        public static ClientJoinManager Instance { get { return lazy.Value; } }
+        void Enqueue(JoinRequestQueueMessage message);
+    }
 
+    internal class JoinManager : IJoinManager
+    {
         // Private queue that all enqueue requests will go into
         // Made it private so we could lock on it safely
-        private readonly Queue<ApiQueueMessage> _requestQueue = new();
+        private readonly Queue<JoinRequestQueueMessage> _requestQueue = new();
+        private readonly IStatsMap _statsMap;
 
         // Map of data that is transitioned from the API into this manager
         // It will track all user data, including their timer subscriptions and task information
-        private readonly Dictionary<int, ClientJoinManagerMapData> _userMap = new();
+        // We will lock on it frequently, because we can call it from the timer callback or from the
+        // processing thread
+        private readonly Dictionary<int, JoinManagerMapData> _userMap = new();
 
         // The id of the first user, or null if we don't have one
         private int? _firstUserId = null;
 
-        private ClientJoinManager()
+        public JoinManager(IStatsMap statsMap)
         {
+            _statsMap = statsMap;
+
             // Because we want this to be single threaded, we make sure this can only ever be invoked
             // on the same thread. We will never have two requests coming in at the same time in this factory
             // That is not to say it won't be an issue; we are still adding objects to the queue from the API thread
@@ -40,7 +47,7 @@ namespace Cyberhaven
 
                             lock (_userMap)
                             {
-                                // If user already exists in map, close their old connection and timer
+                                // If user already exists in map, cleanup their old request
                                 if (_userMap.ContainsKey(message.UserId))
                                 {
                                     RemoveFromMap(message.UserId);
@@ -51,7 +58,7 @@ namespace Cyberhaven
                             lock (_userMap)
                             {
                                 // Storing the timer object for cleanup and the milliseconds for Stats call
-                                var mapMessage = new ClientJoinManagerMapData()
+                                var mapMessage = new JoinManagerMapData()
                                 {
                                     Message = message,
                                     Timer = GetTimer(message.UserId),
@@ -109,7 +116,7 @@ namespace Cyberhaven
             TaskScheduler.Current);
         }
 
-        public void Enqueue(ApiQueueMessage item)
+        public void Enqueue(JoinRequestQueueMessage item)
         {
             lock (_requestQueue)
             {
@@ -140,11 +147,11 @@ namespace Cyberhaven
         {
             // Don't need to lock here, since this is only called from a single-threaded space
             // However, safer to do it until I can test thoroughly
-            lock (StatsMap.Instance)
+            lock (_statsMap)
             {
                 // Find our millisecond difference (not micro in C#, sorry)
                 var millisecondsToJoin = millisecondEnd - millisecondStart;
-                StatsMap.Instance.Add(guid, millisecondsToJoin);
+                _statsMap.Add(guid, millisecondsToJoin);
             }
         }
 
